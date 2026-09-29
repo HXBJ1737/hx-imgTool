@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>HX 图片工具箱 · 本地图片处理</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">🎨</span>
+    <div class="brand-text">
+      <h1>HX 图片工具箱</h1>
+      <span class="tag">100% 本地处理 · 图片不会上传</span>
+    </div>
+  </div>
+  <div class="actions">
+    <button id="btnOpen" class="btn">📂 打开图片</button>
+    <button id="btnDemo" class="btn ghost">🧪 示例图片</button>
+    <span class="spacer"></span>
+    <button id="btnExportAll" class="btn ghost" disabled title="按各自设置导出队列中的全部图片">导出全部</button>
+    <button id="btnExport" class="btn primary" disabled>⬇ 导出当前</button>
+  </div>
+</header>
+
+<main class="layout">
+
+  <!-- 左侧：图片队列 -->
+  <aside class="queue">
+    <div class="pane-title">图片队列 <span id="queueCount" class="muted"></span></div>
+    <div id="queueList" class="queue-list"></div>
+  </aside>
+
+  <!-- 中间：预览区 -->
+  <section class="stage" id="stage">
+    <div id="dropHint" class="drop-hint">
+      <div class="drop-icon">🖼️</div>
+      <p>拖拽图片到此处，或点击右上角「打开图片」</p>
+      <p class="muted">支持 JPG / PNG / WebP / GIF / BMP，可多选；也可直接 Ctrl+V 粘贴</p>
+    </div>
+    <div id="canvasWrap" class="canvas-wrap" hidden>
+      <canvas id="previewCanvas"></canvas>
+      <canvas id="cropCanvas" hidden></canvas>
+      <div id="cropOverlay" hidden></div>
+    </div>
+    <div class="statusbar"><span id="stName">—</span><span id="stMeta" class="muted"></span></div>
+  </section>
+
+  <!-- 右侧：控制面板 -->
+  <aside class="panel disabled" id="panel">
+
+    <details class="card" id="secGeo" open>
+      <summary>旋转与翻转</summary>
+      <div class="body">
+        <div class="btn-row">
+          <button id="rotL" class="btn sm" title="逆时针旋转 90°">↺ 左转 90°</button>
+          <button id="rotR" class="btn sm" title="顺时针旋转 90°">↻ 右转 90°</button>
+          <button id="flipHBtn" class="btn sm" title="左右镜像">⇋ 水平翻转</button>
+          <button id="flipVBtn" class="btn sm" title="上下镜像">⇵ 垂直翻转</button>
+        </div>
+        <div class="ctrl">
+          <label>微调角度 <span class="val" id="angleVal">0°</span></label>
+          <input type="range" id="angle" min="-45" max="45" step="0.5" value="0">
+        </div>
+        <p class="hint">微调角度会扩展画布，旋转产生的空白区域导出 JPEG 时以底色填充。</p>
+      </div>
+    </details>
+
+    <details class="card" id="secCrop" open>
+      <summary>裁剪</summary>
+      <div class="body">
+        <div class="btn-row">
+          <button id="cropEnter" class="btn sm primary">✂ 进入裁剪模式</button>
+        </div>
+        <div id="cropActions" class="crop-actions" hidden>
+          <div class="ctrl">
+            <label>裁剪比例</label>
+            <select id="cropAspect">
+              <option value="0">自由</option>
+              <option value="1">1 : 1</option>
+              <option value="1.3333333333333333">4 : 3</option>
+              <option value="0.75">3 : 4</option>
+              <option value="1.7777777777777777">16 : 9</option>
+              <option value="0.5625">9 : 16</option>
+            </select>
+          </div>
+          <div class="btn-row">
+            <button id="cropApply" class="btn sm primary">✓ 应用裁剪</button>
+            <button id="cropCancel" class="btn sm">✕ 取消</button>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button id="cropReset" class="btn sm ghost">清除裁剪（恢复完整画面）</button>
+        </div>
+        <p class="hint" id="cropState">未裁剪</p>
+      </div>
+    </details>
+
+    <details class="card" open>
+      <summary>缩放</summary>
+      <div class="body">
+        <div class="ctrl">
+          <label>缩放方式</label>
+          <select id="scaleMode">
+            <option value="percent">按百分比</option>
+            <option value="custom">自定义宽高</option>
+          </select>
+        </div>
+        <div id="rowPercent" class="ctrl">
+          <label>缩放比例 <span class="val" id="scalePercentVal">100%</span></label>
+          <input type="range" id="scalePercent" min="5" max="200" step="5" value="100">
+        </div>
+        <div id="rowWH" class="wh-row" hidden>
+          <div class="wh-inputs">
+            <input type="number" id="scaleW" min="1" max="20000" placeholder="宽"> ×
+            <input type="number" id="scaleH" min="1" max="20000" placeholder="高"> px
+          </div>
+          <label class="chk"><input type="checkbox" id="lockRatio" checked> 锁定宽高比</label>
+        </div>
+        <p class="hint">输出尺寸：<b id="outDims">—</b></p>
+      </div>
+    </details>
+
+    <details class="card" open>
+      <summary>亮度 · 对比度 · 锐化</summary>
+      <div class="body">
+        <div class="ctrl">
+          <label>亮度 <span class="val" id="brightnessVal">100</span></label>
+          <input type="range" id="brightness" min="0" max="200" value="100">
+        </div>
+        <div class="ctrl">
+          <label>对比度 <span class="val" id="contrastVal">100</span></label>
+          <input type="range" id="contrast" min="0" max="200" value="100">
+        </div>
+        <div class="ctrl">
+          <label>锐化 <span class="val" id="sharpenVal">0</span></label>
+          <input type="range" id="sharpen" min="0" max="100" value="0">
+        </div>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary>水印</summary>
+      <div class="body">
+        <label class="chk"><input type="checkbox" id="wmEnabled"> 启用文字水印</label>
+        <div id="wmBox" class="wm-grid off">
+          <div class="ctrl">
+            <label>水印文字</label>
+            <input type="text" id="wmText" value="水印文字" maxlength="60">
+          </div>
+          <div class="two-col">
+            <div class="ctrl">
+              <label>字体</label>
+              <select id="wmFont">
+                <option value="sans">无衬线</option>
+                <option value="serif">衬线</option>
+                <option value="mono">等宽</option>
+                <option value="kai">楷体</option>
+              </select>
+            </div>
+            <div class="ctrl">
+              <label>颜色</label>
+              <input type="color" id="wmColor" value="#ffffff">
+            </div>
+          </div>
+          <label class="chk"><input type="checkbox" id="wmBold" checked> 加粗</label>
+          <div class="ctrl">
+            <label>字号（占图片宽度） <span class="val" id="wmSizeVal">5%</span></label>
+            <input type="range" id="wmSize" min="1" max="15" step="0.5" value="5">
+          </div>
+          <div class="ctrl">
+            <label>不透明度 <span class="val" id="wmOpacityVal">60%</span></label>
+            <input type="range" id="wmOpacity" min="5" max="100" value="60">
+          </div>
+          <div class="ctrl">
+            <label>水印旋转 <span class="val" id="wmAngleVal">0°</span></label>
+            <input type="range" id="wmAngle" min="-90" max="90" step="1" value="0">
+          </div>
+          <div class="ctrl">
+            <label>位置</label>
+            <select id="wmPos">
+              <option value="tl">左上</option><option value="tc">上中</option><option value="tr">右上</option>
+              <option value="cl">左中</option><option value="cc">居中</option><option value="cr">右中</option>
+              <option value="bl">左下</option><option value="bc">下中</option><option value="br" selected>右下</option>
+            </select>
+          </div>
+          <div class="ctrl">
+            <label>边距（占图片宽度） <span class="val" id="wmMarginVal">4%</span></label>
+            <input type="range" id="wmMargin" min="0" max="15" step="0.5" value="4">
+          </div>
+          <label class="chk"><input type="checkbox" id="wmTile"> 平铺水印（覆盖全图）</label>
+          <div class="ctrl" id="wmTileGapRow">
+            <label>平铺间距（占字号） <span class="val" id="wmTileGapVal">160%</span></label>
+            <input type="range" id="wmTileGap" min="20" max="400" step="10" value="160">
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <details class="card" open>
+      <summary>导出与压缩</summary>
+      <div class="body">
+        <div class="ctrl">
+          <label>导出格式</label>
+          <select id="fmt">
+            <option value="jpeg">JPEG（有损压缩）</option>
+            <option value="webp">WebP（压缩率高）</option>
+            <option value="png">PNG（无损）</option>
+          </select>
+        </div>
+        <div class="ctrl" id="qualityRow">
+          <label>质量 <span class="val" id="qualityVal">80</span></label>
+          <input type="range" id="quality" min="5" max="100" value="80">
+        </div>
+        <div class="ctrl" id="jpegBgRow" hidden>
+          <label>JPEG 底色（填充透明区域）</label>
+          <input type="color" id="jpegBg" value="#ffffff">
+        </div>
+        <div class="ctrl">
+          <label>文件名后缀</label>
+          <input type="text" id="suffix" value="-edited" maxlength="30">
+        </div>
+        <div class="target-row">
+          <input type="number" id="targetKB" min="1" placeholder="目标大小 KB">
+          <button id="btnTarget" class="btn sm" title="自动寻找最接近目标大小的质量值（仅 JPEG / WebP）">压缩到目标大小</button>
+        </div>
+        <p class="hint" id="estInfo">预计输出大小：—</p>
+        <div class="btn-row">
+          <button id="btnResetAll" class="btn ghost sm">重置当前图片全部设置</button>
+        </div>
+      </div>
+    </details>
+
+  </aside>
+</main>
+
+<div id="toast" class="toast" hidden></div>
+<input type="file" id="fileInput" accept="image/*" multiple hidden>
+<script src="js/app.js"></script>
+</body>
+</html>
